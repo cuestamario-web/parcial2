@@ -5,8 +5,6 @@ import random
 import gspread
 from google.oauth2.service_account import Credentials
 
-TIEMPO_EXAMEN = 60 * 30
-
 # =====================
 # GOOGLE SHEETS
 # =====================
@@ -41,38 +39,33 @@ def seleccionar_preguntas():
     abiertas = [p for p in todas if p["tipo"] == "abierta"]
     cerradas = [p for p in todas if p["tipo"] == "multiple"]
 
-    return random.sample(abiertas, 6) + random.sample(cerradas, 4)
+    seleccion = random.sample(abiertas, 6) + random.sample(cerradas, 4)
+    random.shuffle(seleccion)
+
+    return seleccion
 
 # =====================
 # APP
 # =====================
 st.title("Parcial Docker")
 
+# =====================
+# LOGIN ESTUDIANTE
+# =====================
 if "nombre" not in st.session_state:
     nombre = st.text_input("Nombre completo")
 
-    if st.button("Iniciar"):
+    if st.button("Iniciar examen"):
         if nombre.strip():
             st.session_state.nombre = nombre
-            st.session_state.start = time.time()
             st.session_state.idx = 0
             st.session_state.respuestas = {}
             st.session_state.preguntas = seleccionar_preguntas()
             st.rerun()
+        else:
+            st.warning("Debe ingresar su nombre")
+
     st.stop()
-
-# =====================
-# CRONÓMETRO
-# =====================
-tiempo = TIEMPO_EXAMEN - (time.time() - st.session_state.start)
-
-if tiempo <= 0:
-    st.warning("Tiempo terminado")
-    finalizar = True
-else:
-    mins, secs = divmod(int(tiempo), 60)
-    st.info(f"Tiempo restante: {mins:02d}:{secs:02d}")
-    finalizar = False
 
 # =====================
 # PREGUNTAS
@@ -80,22 +73,28 @@ else:
 i = st.session_state.idx
 preguntas = st.session_state.preguntas
 
-if not finalizar and i < len(preguntas):
+if i < len(preguntas):
     p = preguntas[i]
 
     st.subheader(f"Pregunta {i+1}")
     st.write(p["enunciado"])
 
+    key_actual = f"resp_{i}"
+
     if p["tipo"] == "multiple":
-        resp = st.text_input("Respuesta (A,B,C,D)")
+        resp = st.text_input("Respuesta (A, B, C o D)", key=key_actual)
     else:
-        resp = st.text_area("Respuesta")
+        resp = st.text_area("Respuesta", key=key_actual)
 
     if st.button("Siguiente"):
         if not resp.strip():
-            st.warning("Debes responder")
+            st.warning("Debes responder antes de continuar")
         else:
             st.session_state.respuestas[p["id"]] = resp
+
+            # Limpiar input
+            st.session_state.pop(key_actual, None)
+
             st.session_state.idx += 1
             st.rerun()
 
@@ -107,10 +106,19 @@ else:
 
     st.markdown("## Parte práctica")
 
-    st.link_button("Ir al repositorio", "https://github.com/cuestamario-web/Parcial_ElectivaIII_D")
+    st.write("Ahora debes realizar la parte práctica:")
+
+    st.link_button(
+        "Ir al repositorio",
+        "https://github.com/cuestamario-web/Parcial_ElectivaIII_D"
+    )
 
     with open("parcial2.docx", "rb") as f:
-        st.download_button("Descargar documento práctico", f, file_name="parcial2.docx")
+        st.download_button(
+            "Descargar documento práctico",
+            f,
+            file_name="parcial2.docx"
+        )
 
     if st.button("Finalizar examen"):
         data = {
