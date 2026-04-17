@@ -1,0 +1,39 @@
+[
+{"id":"a1","tipo":"abierta","enunciado":"Un ingeniero construye una imagen correctamente, pero al ejecutar el contenedor la aplicación no inicia automáticamente. Explique qué pudo haber faltado en el Dockerfile y por qué esto afecta el comportamiento del contenedor."},
+
+{"id":"a2","tipo":"abierta","enunciado":"Se tienen dos contenedores en ejecución dentro de la misma red, pero uno no logra conectarse al otro utilizando su nombre como hostname. Mencione dos posibles causas relacionadas con la configuración de Docker."},
+
+{"id":"a3","tipo":"abierta","enunciado":"Se ejecuta un contenedor que funciona correctamente, pero al eliminarlo y volverlo a crear, los datos previamente generados desaparecen. Explique qué concepto de Docker no fue aplicado correctamente y cómo solucionarlo."},
+
+{"id":"a4","tipo":"abierta","enunciado":"Se ejecuta un contenedor con una aplicación web, pero no es posible acceder a ella desde el navegador del host. Explique dos posibles causas relacionadas con la ejecución del contenedor."},
+
+{"id":"a5","tipo":"abierta","enunciado":"Se modifica una línea en un Dockerfile y se ejecuta nuevamente el proceso de build, pero el cambio no se refleja en la imagen generada. Explique por qué puede ocurrir esto y qué acción debería tomarse."},
+
+{"id":"a6","tipo":"abierta","enunciado":"Se tiene una aplicación que depende de variables de configuración y se decide utilizar ARG en lugar de ENV. Explique por qué esta decisión puede generar problemas en tiempo de ejecución."},
+
+{"id":"a7","tipo":"abierta","enunciado":"Un contenedor intenta conectarse a una base de datos utilizando localhost como dirección, pero la conexión falla. Explique por qué ocurre esto y cuál sería la forma correcta de establecer la conexión."},
+
+{"id":"a8","tipo":"abierta","enunciado":"Se crea una red Docker personalizada con una subnet definida, pero al intentar asignar una IP manual a un contenedor, este no inicia correctamente. Explique qué pudo haber causado el error."},
+
+{"id":"a9","tipo":"abierta","enunciado":"Un Dockerfile instala correctamente las dependencias, pero el proceso de construcción de la imagen tarda demasiado cada vez que se ejecuta. Explique cómo el orden de las instrucciones puede afectar este comportamiento."},
+
+{"id":"a10","tipo":"abierta","enunciado":"Se ejecuta un contenedor con múltiples parámetros (-v, -p, --network, -e), pero la aplicación no se comporta como se esperaba. Explique por qué es importante comprender cada parámetro y cómo un error en uno solo puede afectar el funcionamiento general del sistema."},
+
+{"id":"c1","tipo":"multiple","enunciado":"¿Qué instrucción en un Dockerfile se utiliza para ejecutar comandos durante la construcción de la imagen?","opciones":["A","B","C","D"]},
+
+{"id":"c2","tipo":"multiple","enunciado":"¿En qué momento está disponible una variable definida con ARG?","opciones":["A","B","C","D"]},
+
+{"id":"c3","tipo":"multiple","enunciado":"Se desea iniciar un contenedor previamente detenido sin crear uno nuevo. ¿Qué comando es el más adecuado?","opciones":["A","B","C","D"]},
+
+{"id":"c4","tipo":"multiple","enunciado":"¿Qué instrucción permite definir el comando que se ejecutará cuando el contenedor inicie?","opciones":["A","B","C","D"]},
+
+{"id":"c5","tipo":"multiple","enunciado":"Dos contenedores están en la misma red Docker, pero uno intenta conectarse al otro usando localhost. ¿Qué ocurrirá?","opciones":["A","B","C","D"]},
+
+{"id":"c6","tipo":"multiple","enunciado":"¿Qué instrucción en un Dockerfile se utiliza para establecer el directorio de trabajo dentro del contenedor?","opciones":["A","B","C","D"]},
+
+{"id":"c7","tipo":"multiple","enunciado":"¿Cuál es la principal ventaja de usar volúmenes en Docker?","opciones":["A","B","C","D"]},
+
+{"id":"c8","tipo":"multiple","enunciado":"Escriba el comando de Docker necesario para ejecutar un contenedor con nombre web_app, en segundo plano, exponiendo puerto 5000 en 9000, usando imagen python-app","opciones":["A","B","C","D"]},
+
+{"id":"c9","tipo":"multiple","enunciado":"Se tiene el comando docker run -d --name test_container nginx ¿Cuál es su comportamiento?","opciones":["A","B","C","D"]}
+]
