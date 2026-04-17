@@ -19,7 +19,7 @@ def normalizar_nombre(nombre):
 # =====================
 def conectar_sheets():
     creds = Credentials.from_service_account_info(
-        json.loads(st.secrets["gcp_service_account"]["json"]),
+        st.secrets["gcp_service_account"],
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     client = gspread.authorize(creds)
