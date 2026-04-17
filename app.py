@@ -23,8 +23,9 @@ def conectar_sheets():
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     client = gspread.authorize(creds)
-    return client.open("respuestas_parcial").sheet1
-
+    return client.open_by_url(
+        "https://docs.google.com/spreadsheets/d/1NEf7T8t3rLWA1osPmmu6JE4EG15FE89E46vIZUcSB5c/edit?gid=0#gid=0"
+    ).sheet1
 def buscar_estudiante(sheet, nombre_norm):
     data = sheet.get_all_records()
     for i, row in enumerate(data, start=2):
