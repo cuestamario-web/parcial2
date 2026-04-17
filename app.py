@@ -20,7 +20,8 @@ def guardar_respuesta(data):
     sheet = conectar_sheets()
     sheet.append_row([
         data["nombre"],
-        data["fecha"],
+        data["hora_inicio"],
+        data["hora_fin"],
         json.dumps(data["respuestas"])
     ])
 
@@ -58,6 +59,7 @@ if "nombre" not in st.session_state:
     if st.button("Iniciar examen"):
         if nombre.strip():
             st.session_state.nombre = nombre
+            st.session_state.hora_inicio = time.strftime("%Y-%m-%d %H:%M:%S")
             st.session_state.idx = 0
             st.session_state.respuestas = {}
             st.session_state.preguntas = seleccionar_preguntas()
@@ -92,7 +94,7 @@ if i < len(preguntas):
         else:
             st.session_state.respuestas[p["id"]] = resp
 
-            # Limpiar input
+            # limpiar input
             st.session_state.pop(key_actual, None)
 
             st.session_state.idx += 1
@@ -123,7 +125,8 @@ else:
     if st.button("Finalizar examen"):
         data = {
             "nombre": st.session_state.nombre,
-            "fecha": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "hora_inicio": st.session_state.hora_inicio,
+            "hora_fin": time.strftime("%Y-%m-%d %H:%M:%S"),
             "respuestas": st.session_state.respuestas
         }
 
