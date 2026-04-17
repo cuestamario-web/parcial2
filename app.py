@@ -51,7 +51,7 @@ def seleccionar_preguntas():
 st.title("Parcial Docker")
 
 # =====================
-# LOGIN ESTUDIANTE
+# LOGIN
 # =====================
 if "nombre" not in st.session_state:
     nombre = st.text_input("Nombre completo")
@@ -63,6 +63,7 @@ if "nombre" not in st.session_state:
             st.session_state.idx = 0
             st.session_state.respuestas = {}
             st.session_state.preguntas = seleccionar_preguntas()
+            st.session_state.hora_fin = None
             st.rerun()
         else:
             st.warning("Debe ingresar su nombre")
@@ -93,6 +94,10 @@ if i < len(preguntas):
             st.warning("Debes responder antes de continuar")
         else:
             st.session_state.respuestas[p["id"]] = resp
+
+            # 🔥 SI ES LA ÚLTIMA PREGUNTA → GUARDAR HORA FIN
+            if i == len(preguntas) - 1:
+                st.session_state.hora_fin = time.strftime("%Y-%m-%d %H:%M:%S")
 
             # limpiar input
             st.session_state.pop(key_actual, None)
@@ -126,7 +131,7 @@ else:
         data = {
             "nombre": st.session_state.nombre,
             "hora_inicio": st.session_state.hora_inicio,
-            "hora_fin": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "hora_fin": st.session_state.hora_fin,
             "respuestas": st.session_state.respuestas
         }
 
