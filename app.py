@@ -1,175 +1,125 @@
 import streamlit as st
 import json
 import time
-import os
+import random
+import gspread
+from google.oauth2.service_account import Credentials
+
+TIEMPO_EXAMEN = 60 * 30
 
 # =====================
-# CONFIGURACIÓN
+# GOOGLE SHEETS
 # =====================
-st.set_page_config(page_title="Sistema de Parciales", layout="wide")
-
-DATA_FILE = "preguntas.json"
-RESP_FILE = "respuestas.json"
-TIEMPO_EXAMEN = 60 * 30  # 30 minutos
-DOCENTE_PASSWORD = "admin123"  # 🔐 Cambia esto
-
-# =====================
-# UTILIDADES
-# =====================
-
-def cargar_preguntas():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-
-def guardar_preguntas(preguntas):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(preguntas, f, indent=4, ensure_ascii=False)
-
+def conectar_sheets():
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    client = gspread.authorize(creds)
+    return client.open("respuestas_parcial").sheet1
 
 def guardar_respuesta(data):
-    if os.path.exists(RESP_FILE):
-        with open(RESP_FILE, "r", encoding="utf-8") as f:
-            respuestas = json.load(f)
-    else:
-        respuestas = []
-
-    respuestas.append(data)
-
-    with open(RESP_FILE, "w", encoding="utf-8") as f:
-        json.dump(respuestas, f, indent=4, ensure_ascii=False)
+    sheet = conectar_sheets()
+    sheet.append_row([
+        data["nombre"],
+        data["fecha"],
+        json.dumps(data["respuestas"])
+    ])
 
 # =====================
-# LOGIN DOCENTE
+# CARGAR PREGUNTAS
 # =====================
+def cargar_preguntas():
+    with open("preguntas.json", "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def login_docente():
-    st.title("Acceso Docente")
-    password = st.text_input("Ingrese contraseña", type="password")
+# =====================
+# SELECCIÓN ALEATORIA
+# =====================
+def seleccionar_preguntas():
+    todas = cargar_preguntas()
+    abiertas = [p for p in todas if p["tipo"] == "abierta"]
+    cerradas = [p for p in todas if p["tipo"] == "multiple"]
 
-    if st.button("Ingresar"):
-        if password == DOCENTE_PASSWORD:
-            st.session_state.auth_docente = True
+    return random.sample(abiertas, 6) + random.sample(cerradas, 4)
+
+# =====================
+# APP
+# =====================
+st.title("Parcial Docker")
+
+if "nombre" not in st.session_state:
+    nombre = st.text_input("Nombre completo")
+
+    if st.button("Iniciar"):
+        if nombre.strip():
+            st.session_state.nombre = nombre
+            st.session_state.start = time.time()
+            st.session_state.idx = 0
+            st.session_state.respuestas = {}
+            st.session_state.preguntas = seleccionar_preguntas()
             st.rerun()
-        else:
-            st.error("Contraseña incorrecta")
+    st.stop()
 
 # =====================
-# MÓDULO DOCENTE
+# CRONÓMETRO
 # =====================
+tiempo = TIEMPO_EXAMEN - (time.time() - st.session_state.start)
 
-def modulo_docente():
-    if "auth_docente" not in st.session_state:
-        login_docente()
-        return
-
-    st.title("Módulo Docente - Banco de Preguntas")
-
-    preguntas = cargar_preguntas()
-
-    with st.form("form_pregunta"):
-        tipo = st.selectbox("Tipo de pregunta", ["multiple", "abierta"])
-        enunciado = st.text_area("Enunciado")
-
-        opciones = []
-        if tipo == "multiple":
-            opciones = [
-                st.text_input(f"Opción {i+1}") for i in range(4)
-            ]
-
-        seccion = st.selectbox("Sección", ["teoria", "practico"])
-
-        submitted = st.form_submit_button("Guardar pregunta")
-
-        if submitted:
-            pregunta = {
-                "tipo": tipo,
-                "enunciado": enunciado,
-                "opciones": opciones,
-                "seccion": seccion
-            }
-            preguntas.append(pregunta)
-            guardar_preguntas(preguntas)
-            st.success("Pregunta guardada")
-
-    st.subheader("Preguntas existentes")
-    for i, p in enumerate(preguntas):
-        st.write(f"{i+1}. {p['enunciado']} ({p['tipo']})")
-
-# =====================
-# MÓDULO ESTUDIANTE
-# =====================
-
-def modulo_estudiante():
-    st.title("Parcial")
-
-    if "nombre" not in st.session_state:
-        nombre = st.text_input("Ingrese su nombre completo")
-        if st.button("Iniciar examen"):
-            if nombre.strip() != "":
-                st.session_state.nombre = nombre
-                st.session_state.start_time = time.time()
-                st.session_state.pagina = 0
-                st.session_state.respuestas = {}
-                st.rerun()
-            else:
-                st.warning("Debe ingresar su nombre")
-        return
-
-    preguntas = cargar_preguntas()
-    preguntas = sorted(preguntas, key=lambda x: x["seccion"])
-
-    tiempo_restante = TIEMPO_EXAMEN - (time.time() - st.session_state.start_time)
-
-    if tiempo_restante <= 0:
-        st.warning("Tiempo finalizado. Enviando intento...")
-        finalizar_examen()
-        return
-
-    mins, secs = divmod(int(tiempo_restante), 60)
-    st.info(f"Tiempo restante: {mins:02d}:{secs:02d}")
-
-    idx = st.session_state.pagina
-
-    if idx < len(preguntas):
-        p = preguntas[idx]
-        st.subheader(f"Pregunta {idx+1}")
-        st.write(p["enunciado"])
-
-        if p["tipo"] == "multiple":
-            resp = st.radio("Seleccione una opción", p["opciones"], key=idx)
-        else:
-            resp = st.text_area("Respuesta", key=idx)
-
-        if st.button("Siguiente"):
-            st.session_state.respuestas[idx] = resp
-            st.session_state.pagina += 1
-            st.rerun()
-    else:
-        finalizar_examen()
-
-
-def finalizar_examen():
-    data = {
-        "nombre": st.session_state.nombre,
-        "respuestas": st.session_state.respuestas,
-        "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
-    }
-
-    guardar_respuesta(data)
-
-    st.success("Examen finalizado y guardado")
-    st.session_state.clear()
-
-# =====================
-# MAIN
-# =====================
-
-modo = st.sidebar.selectbox("Modo", ["Estudiante", "Docente"])
-
-if modo == "Docente":
-    modulo_docente()
+if tiempo <= 0:
+    st.warning("Tiempo terminado")
+    finalizar = True
 else:
-    modulo_estudiante()
+    mins, secs = divmod(int(tiempo), 60)
+    st.info(f"Tiempo restante: {mins:02d}:{secs:02d}")
+    finalizar = False
+
+# =====================
+# PREGUNTAS
+# =====================
+i = st.session_state.idx
+preguntas = st.session_state.preguntas
+
+if not finalizar and i < len(preguntas):
+    p = preguntas[i]
+
+    st.subheader(f"Pregunta {i+1}")
+    st.write(p["enunciado"])
+
+    if p["tipo"] == "multiple":
+        resp = st.text_input("Respuesta (A,B,C,D)")
+    else:
+        resp = st.text_area("Respuesta")
+
+    if st.button("Siguiente"):
+        if not resp.strip():
+            st.warning("Debes responder")
+        else:
+            st.session_state.respuestas[p["id"]] = resp
+            st.session_state.idx += 1
+            st.rerun()
+
+# =====================
+# FINAL
+# =====================
+else:
+    st.success("Has terminado la parte teórica")
+
+    st.markdown("## Parte práctica")
+
+    st.link_button("Ir al repositorio", "https://github.com/cuestamario-web/Parcial_ElectivaIII_D")
+
+    with open("parcial2.docx", "rb") as f:
+        st.download_button("Descargar documento práctico", f, file_name="parcial2.docx")
+
+    if st.button("Finalizar examen"):
+        data = {
+            "nombre": st.session_state.nombre,
+            "fecha": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "respuestas": st.session_state.respuestas
+        }
+
+        guardar_respuesta(data)
+
+        st.success("Respuestas guardadas correctamente")
+        st.session_state.clear()
