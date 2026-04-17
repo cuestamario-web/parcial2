@@ -72,7 +72,7 @@ def cargar_preguntas():
         banco = json.load(f)
 
     abiertas = [p for p in banco if p["tipo"] == "abierta"]
-    cerradas = [p for p in banco if p["tipo"] == "cerrada"]
+    cerradas = [p for p in banco if p["tipo"] == "multiple"]
 
     preguntas = random.sample(abiertas, 6) + random.sample(cerradas, 4)
     random.shuffle(preguntas)
