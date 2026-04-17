@@ -1,169 +1,178 @@
 import streamlit as st
 import json
-import time
 import random
-import re
+from datetime import datetime
 import gspread
 from google.oauth2.service_account import Credentials
 
-# =====================
-# NORMALIZAR NOMBRE
-# =====================
-def normalizar_nombre(nombre):
-    nombre = nombre.strip().lower()
-    nombre = re.sub(r"\s+", " ", nombre)
-    return nombre
+# =========================
+# CONFIG
+# =========================
+SPREADSHEET_ID = "1NEf7T8t3rLWA1osPmmu6JE4EG15FE89E46vIZUcSB5c"
 
-# =====================
-# GOOGLE SHEETS
-# =====================
+# =========================
+# CONEXION GOOGLE SHEETS
+# =========================
 def conectar_sheets():
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        json.loads(st.secrets["gcp_service_account"]["json"]),
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     client = gspread.authorize(creds)
-    return client.open_by_url(
-        "https://docs.google.com/spreadsheets/d/1NEf7T8t3rLWA1osPmmu6JE4EG15FE89E46vIZUcSB5c/edit?gid=0#gid=0"
-    ).sheet1
-def buscar_estudiante(sheet, nombre_norm):
-    data = sheet.get_all_records()
-    for i, row in enumerate(data, start=2):
-        if row["nombre_normalizado"] == nombre_norm:
-            return i, row
-    return None, None
+    return client.open_by_key(SPREADSHEET_ID).sheet1
 
-def guardar_o_actualizar(data):
-    sheet = conectar_sheets()
-    fila, existente = buscar_estudiante(sheet, data["nombre_norm"])
+sheet = conectar_sheets()
+
+# =========================
+# UTILIDADES
+# =========================
+def normalizar_texto(texto):
+    return texto.strip().lower()
+
+def normalizar_fila(fila):
+    return {k.strip().lower(): v for k, v in fila.items()}
+
+def obtener_filas():
+    filas = sheet.get_all_records()
+    return [normalizar_fila(f) for f in filas]
+
+def guardar_o_actualizar(nombre, data):
+    filas = obtener_filas()
+    nombre_norm = normalizar_texto(nombre)
+
+    fila_idx = None
+    for i, f in enumerate(filas):
+        if normalizar_texto(f.get("nombre_normalizado", "")) == nombre_norm:
+            fila_idx = i + 2  # +2 por header
+            break
 
     fila_data = [
-        data["nombre"],
-        data["nombre_norm"],
-        data["hora_inicio"],
-        data["hora_fin"],
-        json.dumps(data["respuestas"]),
-        data["idx"],
-        json.dumps(data["preguntas"])
+        nombre,
+        nombre_norm,
+        data.get("hora_inicio", ""),
+        data.get("hora_fin", ""),
+        json.dumps(data.get("respuestas", {})),
+        data.get("idx", 0),
+        json.dumps(data.get("preguntas", []))
     ]
 
-    if fila:
-        sheet.update(f"A{fila}:G{fila}", [fila_data])
+    if fila_idx:
+        sheet.update(values=[fila_data], range_name=f"A{fila_idx}:G{fila_idx}")
     else:
         sheet.append_row(fila_data)
 
-# =====================
-# PREGUNTAS
-# =====================
-def cargar_preguntas():
-    with open("preguntas.json", "r", encoding="utf-8") as f:
-        return json.load(f)
+# =========================
+# CARGAR PREGUNTAS
+# =========================
+with open("preguntas.json", "r", encoding="utf-8") as f:
+    banco = json.load(f)
 
-def seleccionar_preguntas():
-    todas = cargar_preguntas()
-    abiertas = [p for p in todas if p["tipo"] == "abierta"]
-    cerradas = [p for p in todas if p["tipo"] == "multiple"]
+abiertas = [p for p in banco if p["tipo"] == "abierta"]
+cerradas = [p for p in banco if p["tipo"] == "cerrada"]
 
-    seleccion = random.sample(abiertas, 6) + random.sample(cerradas, 4)
-    random.shuffle(seleccion)
-    return seleccion
+preguntas = random.sample(abiertas, 6) + random.sample(cerradas, 4)
+random.shuffle(preguntas)
 
-# =====================
-# APP
-# =====================
-st.title("Parcial Docker")
-
-# =====================
-# LOGIN / CONTROL INTENTO
-# =====================
+# =========================
+# SESSION STATE
+# =========================
 if "nombre" not in st.session_state:
-    nombre = st.text_input("Nombre completo")
+    st.session_state.nombre = None
+if "idx" not in st.session_state:
+    st.session_state.idx = 0
+if "respuestas" not in st.session_state:
+    st.session_state.respuestas = {}
+if "preguntas" not in st.session_state:
+    st.session_state.preguntas = []
+if "hora_inicio" not in st.session_state:
+    st.session_state.hora_inicio = ""
+if "hora_fin" not in st.session_state:
+    st.session_state.hora_fin = ""
 
-    if st.button("Iniciar / Continuar"):
-        if nombre.strip():
-            nombre_norm = normalizar_nombre(nombre)
-            sheet = conectar_sheets()
-            fila, existente = buscar_estudiante(sheet, nombre_norm)
+# =========================
+# LOGIN
+# =========================
+if not st.session_state.nombre:
+    st.title("Parcial")
+
+    nombre = st.text_input("Ingrese su nombre completo")
+
+    if st.button("Iniciar"):
+        if nombre.strip() == "":
+            st.warning("Debe ingresar su nombre")
+        else:
+            filas = obtener_filas()
+            nombre_norm = normalizar_texto(nombre)
+
+            existente = None
+            for f in filas:
+                if normalizar_texto(f.get("nombre_normalizado", "")) == nombre_norm:
+                    existente = f
+                    break
 
             if existente:
-                # 🔒 SI YA TERMINÓ → BLOQUEAR
-                if existente["hora_fin"]:
-                    st.error("Ya existe un intento finalizado para este estudiante")
-                    st.stop()
-
-                # 🔁 RECUPERAR
-                st.session_state.nombre = existente["nombre"]
-                st.session_state.nombre_norm = nombre_norm
-                st.session_state.hora_inicio = existente["hora_inicio"]
-                st.session_state.respuestas = json.loads(existente["respuestas_json"]) if existente["respuestas_json"] else {}
-                st.session_state.idx = int(existente["ultima_pregunta"])
-                st.session_state.preguntas = json.loads(existente["preguntas_json"])
-                st.session_state.hora_fin = existente["hora_fin"]
-
-            else:
-                # 🆕 NUEVO
-                preguntas = seleccionar_preguntas()
-
                 st.session_state.nombre = nombre
-                st.session_state.nombre_norm = nombre_norm
-                st.session_state.hora_inicio = time.strftime("%Y-%m-%d %H:%M:%S")
+                st.session_state.idx = int(existente.get("ultima_pregunta", 0))
+                st.session_state.respuestas = json.loads(existente.get("respuestas_json", "{}")) if existente.get("respuestas_json") else {}
+                st.session_state.preguntas = json.loads(existente.get("preguntas_json", "[]")) if existente.get("preguntas_json") else []
+                st.session_state.hora_inicio = existente.get("hora_inicio", "")
+                st.session_state.hora_fin = existente.get("hora_fin", "")
+            else:
+                st.session_state.nombre = nombre
                 st.session_state.idx = 0
                 st.session_state.respuestas = {}
                 st.session_state.preguntas = preguntas
-                st.session_state.hora_fin = None
+                st.session_state.hora_inicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                guardar_o_actualizar({
-                    "nombre": nombre,
-                    "nombre_norm": nombre_norm,
+                guardar_o_actualizar(nombre, {
                     "hora_inicio": st.session_state.hora_inicio,
-                    "hora_fin": None,
+                    "hora_fin": "",
                     "respuestas": {},
                     "idx": 0,
-                    "preguntas": preguntas
+                    "preguntas": st.session_state.preguntas
                 })
 
             st.rerun()
-        else:
-            st.warning("Debe ingresar su nombre")
 
     st.stop()
 
-# =====================
-# PREGUNTAS
-# =====================
-i = st.session_state.idx
+# =========================
+# EXAMEN
+# =========================
+st.title("Parcial en curso")
+
+idx = st.session_state.idx
 preguntas = st.session_state.preguntas
 
-if i < len(preguntas):
-    p = preguntas[i]
+if idx < len(preguntas):
 
-    st.subheader(f"Pregunta {i+1}")
-    st.write(p["enunciado"])
+    pregunta = preguntas[idx]
 
-    key_actual = f"resp_{i}"
+    st.write(f"Pregunta {idx+1}")
+    st.write(pregunta["enunciado"])
 
-    if p["tipo"] == "multiple":
-        resp = st.text_input("Respuesta (A, B, C o D)", key=key_actual)
+    if pregunta["tipo"] == "cerrada":
+        respuesta = st.radio(
+            "Seleccione una opción",
+            pregunta["opciones"],
+            key=f"p{idx}"
+        )
     else:
-        resp = st.text_area("Respuesta", key=key_actual)
+        respuesta = st.text_input(
+            "Respuesta",
+            key=f"p{idx}"
+        )
 
     if st.button("Siguiente"):
-        if not resp.strip():
-            st.warning("Debes responder antes de continuar")
+        if not respuesta:
+            st.warning("Debe responder antes de continuar")
         else:
-            st.session_state.respuestas[p["id"]] = resp
-
-            if i == len(preguntas) - 1:
-                st.session_state.hora_fin = time.strftime("%Y-%m-%d %H:%M:%S")
-
-            st.session_state.pop(key_actual, None)
+            st.session_state.respuestas[str(idx)] = respuesta
             st.session_state.idx += 1
 
-            guardar_o_actualizar({
-                "nombre": st.session_state.nombre,
-                "nombre_norm": st.session_state.nombre_norm,
+            guardar_o_actualizar(st.session_state.nombre, {
                 "hora_inicio": st.session_state.hora_inicio,
-                "hora_fin": st.session_state.hora_fin,
+                "hora_fin": "",
                 "respuestas": st.session_state.respuestas,
                 "idx": st.session_state.idx,
                 "preguntas": st.session_state.preguntas
@@ -171,30 +180,11 @@ if i < len(preguntas):
 
             st.rerun()
 
-# =====================
-# FINAL
-# =====================
 else:
-    st.success("Has terminado la parte teórica")
+    if not st.session_state.hora_fin:
+        st.session_state.hora_fin = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    st.markdown("## Parte práctica")
-
-    st.link_button(
-        "Ir al repositorio",
-        "https://github.com/cuestamario-web/Parcial_ElectivaIII_D"
-    )
-
-    with open("parcial2.docx", "rb") as f:
-        st.download_button(
-            "Descargar documento práctico",
-            f,
-            file_name="parcial2.docx"
-        )
-
-    if st.button("Finalizar examen"):
-        guardar_o_actualizar({
-            "nombre": st.session_state.nombre,
-            "nombre_norm": st.session_state.nombre_norm,
+        guardar_o_actualizar(st.session_state.nombre, {
             "hora_inicio": st.session_state.hora_inicio,
             "hora_fin": st.session_state.hora_fin,
             "respuestas": st.session_state.respuestas,
@@ -202,5 +192,10 @@ else:
             "preguntas": st.session_state.preguntas
         })
 
-        st.success("Examen finalizado correctamente")
-        st.session_state.clear()
+    st.success("Ha finalizado el cuestionario")
+
+    st.markdown("### Parte práctica")
+    st.link_button("Ir al repositorio", "https://github.com/cuestamario-web/Parcial_ElectivaIII_D")
+
+    with open("parcial2.docx", "rb") as f:
+        st.download_button("Descargar guía", f, file_name="parcial2.docx")
