@@ -6,16 +6,16 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 # =========================
-# CONFIGURACIÓN
+# CONFIG
 # =========================
 SPREADSHEET_ID = "1NEf7T8t3rLWA1osPmmu6JE4EG15FE89E46vIZUcSB5c"
 
 # =========================
-# CONEXIÓN A GOOGLE SHEETS
+# CONEXION GOOGLE SHEETS
 # =========================
 def conectar_sheets():
     creds = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"],
+        json.loads(st.secrets["gcp_service_account"]["json"]),
         scopes=["https://www.googleapis.com/auth/spreadsheets"]
     )
     client = gspread.authorize(creds)
@@ -34,8 +34,7 @@ def normalizar_fila(fila):
 
 def obtener_filas():
     try:
-        filas = sheet.get_all_records()
-        return [normalizar_fila(f) for f in filas]
+        return [normalizar_fila(f) for f in sheet.get_all_records()]
     except:
         return []
 
@@ -65,7 +64,7 @@ def guardar_o_actualizar(nombre, data):
         sheet.append_row(fila_data)
 
 # =========================
-# CARGA DE PREGUNTAS
+# PREGUNTAS
 # =========================
 @st.cache_data
 def cargar_preguntas():
@@ -81,104 +80,83 @@ def cargar_preguntas():
     return preguntas
 
 # =========================
-# INICIALIZAR SESSION STATE
+# SESSION STATE
 # =========================
-def init_session():
-    defaults = {
-        "nombre": None,
-        "idx": 0,
-        "respuestas": {},
-        "preguntas": [],
-        "hora_inicio": "",
-        "hora_fin": ""
-    }
-
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-init_session()
+for k, v in {
+    "nombre": None,
+    "idx": 0,
+    "respuestas": {},
+    "preguntas": [],
+    "hora_inicio": "",
+    "hora_fin": ""
+}.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 # =========================
 # LOGIN
 # =========================
-def login():
+if not st.session_state.nombre:
     st.title("Parcial")
-
     nombre = st.text_input("Ingrese su nombre completo")
 
     if st.button("Iniciar"):
         if not nombre.strip():
             st.warning("Debe ingresar su nombre")
-            return
-
-        filas = obtener_filas()
-        nombre_norm = normalizar_texto(nombre)
-
-        existente = None
-        for f in filas:
-            if normalizar_texto(f.get("nombre_normalizado", "")) == nombre_norm:
-                existente = f
-                break
-
-        if existente:
-            st.session_state.nombre = nombre
-            st.session_state.idx = int(existente.get("ultima_pregunta", 0))
-            st.session_state.respuestas = json.loads(existente.get("respuestas_json", "{}") or "{}")
-            st.session_state.preguntas = json.loads(existente.get("preguntas_json", "[]") or "[]")
-            st.session_state.hora_inicio = existente.get("hora_inicio", "")
-            st.session_state.hora_fin = existente.get("hora_fin", "")
-
         else:
-            st.session_state.nombre = nombre
-            st.session_state.idx = 0
-            st.session_state.respuestas = {}
-            st.session_state.preguntas = cargar_preguntas()
-            st.session_state.hora_inicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            filas = obtener_filas()
+            nombre_norm = normalizar_texto(nombre)
 
-            guardar_o_actualizar(nombre, {
-                "hora_inicio": st.session_state.hora_inicio,
-                "hora_fin": "",
-                "respuestas": {},
-                "idx": 0,
-                "preguntas": st.session_state.preguntas
-            })
+            existente = next((f for f in filas if normalizar_texto(f.get("nombre_normalizado","")) == nombre_norm), None)
 
-        st.rerun()
+            if existente:
+                st.session_state.nombre = nombre
+                st.session_state.idx = int(existente.get("ultima_pregunta", 0))
+                st.session_state.respuestas = json.loads(existente.get("respuestas_json", "{}") or "{}")
+                st.session_state.preguntas = json.loads(existente.get("preguntas_json", "[]") or "[]")
+                st.session_state.hora_inicio = existente.get("hora_inicio", "")
+                st.session_state.hora_fin = existente.get("hora_fin", "")
+            else:
+                st.session_state.nombre = nombre
+                st.session_state.preguntas = cargar_preguntas()
+                st.session_state.hora_inicio = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                guardar_o_actualizar(nombre, {
+                    "hora_inicio": st.session_state.hora_inicio,
+                    "hora_fin": "",
+                    "respuestas": {},
+                    "idx": 0,
+                    "preguntas": st.session_state.preguntas
+                })
+
+            st.rerun()
+    st.stop()
 
 # =========================
 # EXAMEN
 # =========================
-def render_examen():
-    st.title("Parcial en curso")
+st.title("Parcial en curso")
 
-    idx = st.session_state.idx
-    preguntas = st.session_state.preguntas
+idx = st.session_state.idx
+preguntas = st.session_state.preguntas
 
-    if idx < len(preguntas):
-        pregunta = preguntas[idx]
+if idx < len(preguntas):
 
-        st.write(f"Pregunta {idx + 1}")
-        st.write(pregunta["enunciado"])
+    p = preguntas[idx]
 
-        if pregunta["tipo"] == "cerrada":
-            respuesta = st.radio(
-                "Seleccione una opción",
-                pregunta["opciones"],
-                key=f"p{idx}"
-            )
+    st.write(f"Pregunta {idx+1}")
+    st.write(p["enunciado"])
+
+    if p["tipo"] == "cerrada":
+        r = st.radio("Seleccione", p["opciones"], key=f"p{idx}")
+    else:
+        r = st.text_input("Respuesta", key=f"p{idx}")
+
+    if st.button("Siguiente"):
+        if not r:
+            st.warning("Debe responder")
         else:
-            respuesta = st.text_input(
-                "Respuesta",
-                key=f"p{idx}"
-            )
-
-        if st.button("Siguiente"):
-            if not respuesta:
-                st.warning("Debe responder antes de continuar")
-                return
-
-            st.session_state.respuestas[str(idx)] = respuesta
+            st.session_state.respuestas[str(idx)] = r
             st.session_state.idx += 1
 
             guardar_o_actualizar(st.session_state.nombre, {
@@ -191,13 +169,7 @@ def render_examen():
 
             st.rerun()
 
-    else:
-        finalizar_examen()
-
-# =========================
-# FINALIZACIÓN
-# =========================
-def finalizar_examen():
+else:
     if not st.session_state.hora_fin:
         st.session_state.hora_fin = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -209,22 +181,9 @@ def finalizar_examen():
             "preguntas": st.session_state.preguntas
         })
 
-    st.success("Ha finalizado el cuestionario")
+    st.success("Finalizado")
 
-    st.markdown("### Parte práctica")
-    st.link_button(
-        "Ir al repositorio",
-        "https://github.com/cuestamario-web/Parcial_ElectivaIII_D"
-    )
+    st.link_button("Repositorio", "https://github.com/cuestamario-web/Parcial_ElectivaIII_D")
 
     with open("parcial2.docx", "rb") as f:
-        st.download_button("Descargar guía", f, file_name="parcial2.docx")
-
-# =========================
-# MAIN
-# =========================
-if not st.session_state.nombre:
-    login()
-    st.stop()
-else:
-    render_examen()
+        st.download_button("Descargar guía", f)
